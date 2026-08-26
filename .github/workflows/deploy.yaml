@@ -1,0 +1,32 @@
+name: Deploy to Kubernetes
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'deploy/**'
+      - 'gateway/**'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: production
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up kubectl
+      uses: azure/setup-kubectl@v3
+    
+    - name: Configure kubectl
+      run: |
+        # Configure kubectl for your cluster
+        echo "${{ secrets.KUBECONFIG }}" | base64 -d > kubeconfig
+        export KUBECONFIG=kubeconfig
+    
+    - name: Apply manifests
+      run: |
+        kubectl apply -f deploy/k8s/nats.yaml -n clep
+        kubectl apply -f deploy/k8s/postgres.yaml -n clep
+        kubectl apply -f deploy/k8s/gateway.yaml -n clep
+        kubectl apply -f deploy/k8s/hermes-adapter.yaml -n clep

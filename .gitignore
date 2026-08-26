@@ -1,0 +1,48 @@
+# Build
+*.exe
+*.exe Manifest
+*.dSYM.*
+*.orig
+*.pyc
+__pycache__
+*.egg-info
+dist
+build
+
+# Go
+vendor/
+
+# Docker
+.dockerenv
+*.tar
+*.tar.gz
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Local config
+.env
+.env.local
+!gateway/.env.example
+
+# Secrets
+*secret*
+*.key
+*.pem
+*.cert
+
+# Local dev
+local/
+tmp/
+temp/

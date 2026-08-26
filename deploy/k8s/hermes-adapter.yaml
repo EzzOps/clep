@@ -1,0 +1,160 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: clep
+  labels:
+    app.kubernetes.io/name: clep
+    app.kubernetes.io/instance: clep
+    app.kubernetes.io/component: namespace
+    control-plane: clep
+
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: clep-secrets
+  namespace: clep
+  labels:
+    app.kubernetes.io/name: clep
+    app.kubernetes.io/instance: clep
+type: Opaque
+stringData:
+  # Plane credentials
+  plane-api-url: "http://plane.clep.svc.cluster.local:80"
+  plane-api-key: "your-plane-api-key-here"
+  plane-webhook-secret: "your-webhook-secret-here"
+  
+  # Database credentials
+  database-url: "postgres://clep:clep-password@postgres-postgresql.clep.svc.cluster.local:5432/clep"
+  
+  # Hermes adapter URL
+  hermes-adapter-url: "http://hermes-adapter.clep.svc.cluster.local:8081"
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: clep-config
+  namespace: clep
+  labels:
+    app.kubernetes.io/name: clep
+    app.kubernetes.io/instance: clep
+data:
+  PORT: "8081"
+  NATS_URL: "nats://nats-nats-cluster.clep.svc.cluster.local:4222"
+  EVENT_STREAM: "clep.events"
+  RESPONSE_STREAM: "clep.responses"
+  LOG_LEVEL: "info"
+  LOG_FORMAT: "json"
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hermes-adapter
+  namespace: clep
+  labels:
+    app.kubernetes.io/name: clep
+    app.kubernetes.io/instance: clep
+    app.kubernetes.io/component: hermes-adapter
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: clep
+      app.kubernetes.io/instance: clep
+      app.kubernetes.io/component: hermes-adapter
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: clep
+        app.kubernetes.io/instance: clep
+        app.kubernetes.io/component: hermes-adapter
+    spec:
+      containers:
+        - name: hermes-adapter
+          image: ezzops/clep-gateway:0.1.0
+          imagePullPolicy: IfNotPresent
+          command:
+            - /gateway
+            - --mode=adapter
+          ports:
+            - name: http
+              containerPort: 8081
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: clep-config
+            - secretRef:
+                name: clep-secrets
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: clep-secrets
+                  key: database-url
+            - name: PLANE_API_URL
+              valueFrom:
+                secretKeyRef:
+                  name: clep-secrets
+                  key: plane-api-url
+            - name: PLANE_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: clep-secrets
+                  key: plane-api-key
+            - name: PLANE_WEBHOOK_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: clep-secrets
+                  key: plane-webhook-secret
+            - name: HERMES_ADAPTER_URL
+              valueFrom:
+                secretKeyRef:
+                  name: clep-secrets
+                  key: hermes-adapter-url
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          resources:
+            limits:
+              cpu: 500m
+              memory: 512Mi
+            requests:
+              cpu: 100m
+              memory: 128Mi
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: hermes-adapter
+  namespace: clep
+  labels:
+    app.kubernetes.io/name: clep
+    app.kubernetes.io/instance: clep
+    app.kubernetes.io/component: hermes-adapter
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+      protocol: TCP
+  selector:
+    app.kubernetes.io/name: clep
+    app.kubernetes.io/instance: clep
+    app.kubernetes.io/component: hermes-adapter

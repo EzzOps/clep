@@ -1,0 +1,30 @@
+name: clep
+version: 0.1.0
+description: "CLEP - Cloud Native Learning Engineering Platform"
+keywords:
+  - kubernetes
+  - cncf
+  - learning
+  - platform-engineering
+  - knative
+
+maintainers:
+  - name: Ezz Ashraf AboAlhamed
+    email: ezzashraf444@gmail.com
+    url: https://github.com/ezzashraf
+
+sources:
+  - https://github.com/EzzOps/clep
+
+annotations:
+  artifacthub.io/category: integration-delivery
+  artifacthub.io/license: MIT
+  artifacthub.io/prerelease: "true"
+  artifacthub.io/recommendations: |
+    url: https://plane.so
+    name: Plane - Self-hosted project management
+  artifacthub.io/links: |
+    - name: Documentation
+      url: https://github.com/EzzOps/clep#readme
+    - name: Architecture
+      url: https://github.com/EzzOps/clep/blob/main/docs/architecture.md

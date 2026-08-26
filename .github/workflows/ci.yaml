@@ -1,0 +1,40 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: '1.21'
+    
+    - name: Build gateway
+      run: |
+        cd gateway
+        go build -v ./...
+    
+    - name: Test
+      run: |
+        cd gateway
+        go test -v ./...
+    
+    - name: Build Docker image
+      run: |
+        docker build -t ezzops/clep-gateway:${{ github.sha }} .
+        docker tag ezzops/clep-gateway:${{ github.sha }} ezzops/clep-gateway:latest
+    
+    - name: Deploy to Kubernetes
+      if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+      run: |
+        # Kubernetes deployment via Flux CD
+        echo "Deploying via Flux CD..."

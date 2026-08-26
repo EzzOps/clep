@@ -1,0 +1,226 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: clep
+  labels:
+    app.kubernetes.io/name: clep
+    app.kubernetes.io/instance: clep
+    app.kubernetes.io/component: namespace
+    control-plane: clep
+
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: postgres-credentials
+  namespace: clep
+  labels:
+    app.kubernetes.io/name: clep
+    app.kubernetes.io/instance: clep
+type: Opaque
+stringData:
+  postgres-password: "clep-password"
+  postgres-user: "clep"
+  postgres-db: "clep"
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-init
+  namespace: clep
+  labels:
+    app.kubernetes.io/name: clep
+    app.kubernetes.io/instance: clep
+data:
+  init.sql: |
+    -- CLEP Schema
+    CREATE SCHEMA IF NOT EXISTS clep;
+    
+    -- Events table
+    CREATE TABLE IF NOT EXISTS clep.events (
+      id TEXT PRIMARY KEY,
+      event_type TEXT NOT NULL,
+      source TEXT NOT NULL,
+      payload JSONB NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ,
+      status TEXT NOT NULL DEFAULT 'created'
+    );
+    
+    -- Agent sessions table
+    CREATE TABLE IF NOT EXISTS clep.agent_sessions (
+      id TEXT PRIMARY KEY,
+      event_id TEXT NOT NULL,
+      work_item_id TEXT NOT NULL,
+      workspace_id TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'running',
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      completed_at TIMESTAMPTZ
+    );
+    
+    -- Agent messages table
+    CREATE TABLE IF NOT EXISTS clep.agent_messages (
+      id SERIAL PRIMARY KEY,
+      session_id TEXT NOT NULL,
+      role TEXT NOT NULL,
+      content TEXT NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+    
+    -- Plane comments table
+    CREATE TABLE IF NOT EXISTS clep.plane_comments (
+      id TEXT PRIMARY KEY,
+      comment TEXT NOT NULL,
+      work_item_id TEXT NOT NULL,
+      workspace_id TEXT NOT NULL,
+      project_id TEXT NOT NULL,
+      created_by TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
+    
+    -- Indexes
+    CREATE INDEX IF NOT EXISTS idx_events_type ON clep.events(event_type);
+    CREATE INDEX IF NOT EXISTS idx_events_source ON clep.events(source);
+    CREATE INDEX IF NOT EXISTS idx_events_status ON clep.events(status);
+    CREATE INDEX IF NOT EXISTS idx_events_created ON clep.events(created_at);
+    CREATE INDEX IF NOT EXISTS idx_agent_sessions_event ON clep.agent_sessions(event_id);
+    CREATE INDEX IF NOT EXISTS idx_agent_sessions_status ON clep.agent_sessions(status);
+    CREATE INDEX IF NOT EXISTS idx_agent_sessions_work_item ON clep.agent_sessions(work_item_id);
+    CREATE INDEX IF NOT EXISTS idx_agent_messages_session ON clep.agent_messages(session_id);
+    CREATE INDEX IF NOT EXISTS idx_plane_comments_work_item ON clep.plane_comments(work_item_id);
+    
+    -- Grant permissions
+    GRANT ALL PRIVILEGES ON DATABASE clep TO clep;
+    GRANT ALL PRIVILEGES ON SCHEMA clep TO clep;
+    GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA clep TO clep;
+    GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA clep TO clep;
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgres
+  namespace: clep
+  labels:
+    app.kubernetes.io/name: clep
+    app.kubernetes.io/instance: clep
+    app.kubernetes.io/component: postgres
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: clep
+      app.kubernetes.io/instance: clep
+      app.kubernetes.io/component: postgres
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: clep
+        app.kubernetes.io/instance: clep
+        app.kubernetes.io/component: postgres
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:15-alpine
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: postgres
+              containerPort: 5432
+              protocol: TCP
+          env:
+            - name: POSTGRES_DB
+              value: "clep"
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-credentials
+                  key: postgres-user
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-credentials
+                  key: postgres-password
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+            - name: init-scripts
+              mountPath: /docker-entrypoint-initdb.d
+          livenessProbe:
+            exec:
+              command:
+                - pg_isready
+                - -U
+                - clep
+                - -d
+                - clep
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            exec:
+              command:
+                - pg_isready
+                - -U
+                - clep
+                - -d
+                - clep
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+          resources:
+            limits:
+              cpu: 1000m
+              memory: 1Gi
+            requests:
+              cpu: 250m
+              memory: 256Mi
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: postgres-pvc
+        - name: init-scripts
+          configMap:
+            name: postgres-init
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgres-pvc
+  namespace: clep
+  labels:
+    app.kubernetes.io/name: clep
+    app.kubernetes.io/instance: clep
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+  storageClassName: standard
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-postgresql
+  namespace: clep
+  labels:
+    app.kubernetes.io/name: clep
+    app.kubernetes.io/instance: clep
+    app.kubernetes.io/component: postgres
+spec:
+  type: ClusterIP
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: postgres
+      protocol: TCP
+  selector:
+    app.kubernetes.io/name: clep
+    app.kubernetes.io/instance: clep
+    app.kubernetes.io/component: postgres

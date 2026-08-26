@@ -1,0 +1,69 @@
+name: clep-gateway
+description: CLEP Gateway service
+version: 0.1.0
+appVersion: 1.0.0
+
+container:
+  image: ezzops/clep-gateway
+  tag: "0.1.0"
+  pullPolicy: IfNotPresent
+  port: 8080
+
+replicaCount: 1
+
+resources:
+  limits:
+    cpu: 500m
+    memory: 512Mi
+  requests:
+    cpu: 100m
+    memory: 128Mi
+
+env:
+  - name: PORT
+    value: "8080"
+  - name: NATS_URL
+    value: "nats://nats.clep.svc.cluster.local:4222"
+  - name: PLANE_API_URL
+    valueFrom:
+      secretKeyRef:
+        name: clep-secrets
+        key: plane-api-url
+  - name: PLANE_API_KEY
+    valueFrom:
+      secretKeyRef:
+        name: clep-secrets
+        key: plane-api-key
+  - name: PLANE_WEBHOOK_SECRET
+    valueFrom:
+      secretKeyRef:
+        name: clep-secrets
+        key: plane-webhook-secret
+  - name: DATABASE_URL
+    valueFrom:
+      secretKeyRef:
+        name: clep-secrets
+        key: database-url
+  - name: HERMES_ADAPTER_URL
+    value: "http://hermes-adapter.clep.svc.cluster.local:8081"
+  - name: EVENT_STREAM
+    value: "clep.events"
+  - name: RESPONSE_STREAM
+    value: "clep.responses"
+
+ingress:
+  enabled: true
+  className: traefik
+  hosts:
+    - host: clep.your-domain.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: clep-tls
+      hosts:
+        - clep.your-domain.com
+
+service:
+  type: ClusterIP
+  port: 80

@@ -1,0 +1,49 @@
+apiVersion: source.toolkit.fluxcd.io/v1beta2
+kind: GitRepository
+metadata:
+  name: clep
+  namespace: flux-system
+spec:
+  interval: 1m0s
+  url: https://github.com/EzzOps/clep.git
+  ref:
+    branch: main
+  secretRef:
+    name: clep-git-credentials
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1beta2
+kind: Kustomization
+metadata:
+  name: clep
+  namespace: flux-system
+spec:
+  interval: 5m0s
+  path: ./deploy
+  prune: true
+  wait: true
+  sourceRef:
+    kind: GitRepository
+    name: clep
+  dependsOn:
+    - name: flux-system
+  postBuild:
+    substitute:
+      IMAGE_TAG: "0.1.0"
+      APP_VERSION: "0.1.0"
+  decryption:
+    provider: sops
+    secretRef:
+      name: sops-age
+  healthChecks:
+    - apiVersion: apps/v1
+      kind: Deployment
+      name: clep-gateway
+      namespace: clep
+    - apiVersion: apps/v1
+      kind: Deployment
+      name: hermes-adapter
+      namespace: clep
+    - apiVersion: v1
+      kind: Pod
+      name: postgres
+      namespace: clep
