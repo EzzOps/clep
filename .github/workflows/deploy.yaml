@@ -6,6 +6,7 @@ on:
     paths:
       - 'deploy/**'
       - 'gateway/**'
+      - '.github/workflows/**'
 
 jobs:
   deploy:
@@ -17,16 +18,23 @@ jobs:
     
     - name: Set up kubectl
       uses: azure/setup-kubectl@v3
+      with:
+        version: 'v1.36.1'
     
     - name: Configure kubectl
       run: |
-        # Configure kubectl for your cluster
         echo "${{ secrets.KUBECONFIG }}" | base64 -d > kubeconfig
         export KUBECONFIG=kubeconfig
+        kubectl config current-context
     
-    - name: Apply manifests
+    - name: Deploy to Kubernetes
       run: |
         kubectl apply -f deploy/k8s/nats.yaml -n clep
         kubectl apply -f deploy/k8s/postgres.yaml -n clep
         kubectl apply -f deploy/k8s/gateway.yaml -n clep
         kubectl apply -f deploy/k8s/hermes-adapter.yaml -n clep
+    
+    - name: Verify deployment
+      run: |
+        kubectl get pods -n clep
+        kubectl get svc -n clep
